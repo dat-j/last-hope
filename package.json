@@ -1,0 +1,31 @@
+{
+  "name": "facebook-chatbot-workflow",
+  "version": "1.0.0",
+  "description": "Facebook Chatbot Workflow Builder with React Flow and XState",
+  "scripts": {
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "dev:db": "cd database && docker-compose up -d",
+    "dev:backend": "cd backend && npm run start:dev",
+    "dev:frontend": "cd frontend && npm start",
+    "dev": "concurrently \"npm run dev:db\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "build": "npm run build:backend && npm run build:frontend",
+    "clean": "rm -rf backend/node_modules frontend/node_modules node_modules",
+    "reset:db": "cd database && docker-compose down -v && docker-compose up -d"
+  },
+  "keywords": [
+    "facebook",
+    "chatbot",
+    "workflow",
+    "react-flow",
+    "xstate",
+    "nestjs",
+    "n8n"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+} 
