@@ -1,55 +1,185 @@
-# XState Workflow Engine - Tài Liệu Chi Tiết
+# XState Workflow Engine Documentation
 
-## Tổng Quan XState trong Hệ Thống
+## 🤖 **Tổng quan XState Engine**
 
-XState là thư viện state machine được sử dụng làm core engine để xử lý workflow chatbot. Nó cung cấp predictable state management và robust workflow execution với khả năng debug tốt.
+XState Workflow Engine là core component của hệ thống chatbot, quản lý luồng hội thoại thông qua **finite state machines**. Engine được thiết kế để xử lý các conversation flows phức tạp với khả năng matching thông minh và debug capabilities mạnh mẽ.
 
-## Kiến Trúc XState Machine
+---
 
-### 1. State Machine Definition
+## ⚙️ **Architecture Overview**
 
+```mermaid
+graph TB
+    User[👤 User Input] --> Machine[🤖 XState Machine]
+    Machine --> Matcher[🔍 Content Matcher]
+    Machine --> Navigator[🧭 Node Navigator]
+    Machine --> Context[📊 Context Manager]
+    
+    Matcher --> Enhanced[✨ Enhanced Matching]
+    Enhanced --> Exact[🎯 Exact Matching]
+    Enhanced --> Fuzzy[🔄 Fuzzy Matching]
+    Enhanced --> Fallback[🔄 Fallback Search]
+    
+    Navigator --> EdgeSelector[🔗 Edge Selector]
+    EdgeSelector --> ButtonMap[🔘 Button Mapping]
+    EdgeSelector --> IndexMap[📍 Index Mapping]
+    
+    Context --> Variables[📝 Variables]
+    Context --> History[📚 History]
+    Context --> State[🔄 State Tracking]
+```
+
+---
+
+## 🔄 **State Machine Definition**
+
+### **Machine States**
+```typescript
+interface WorkflowStates {
+  waiting: {
+    // Chờ user input
+    // Trigger: USER_MESSAGE event
+  };
+  processing: {
+    // Xử lý message và tìm next node
+    // Logic: findNextNode(), matchesNodeContent()
+  };
+  responding: {
+    // Gửi response từ workflow node
+    // Output: botResponse trong context
+  };
+  unmatched: {
+    // Xử lý khi message không match workflow
+    // Fallback: Return original user message
+  };
+  ended: {
+    // Workflow kết thúc (no outgoing edges)
+    // Terminal state
+  };
+}
+```
+
+### **State Transitions**
 ```mermaid
 stateDiagram-v2
     [*] --> waiting
     
     waiting --> processing : USER_MESSAGE
-    processing --> responding : messageMatched & hasResponse
-    processing --> unmatched : messageNotMatched
-    processing --> ended : noOutgoingEdges
-    processing --> waiting : messageMatched & noResponse
+    waiting --> waiting : RESET
+    
+    processing --> responding : messageMatchedWorkflow = true
+    processing --> unmatched : messageMatchedWorkflow = false
+    processing --> ended : no outgoing edges
+    processing --> waiting : fallback
     
     responding --> waiting : NEXT_NODE
-    unmatched --> waiting : defaultResponse
-    ended --> [*] : workflowComplete
+    responding --> processing : USER_MESSAGE
     
-    waiting : Chờ tin nhắn từ user
-    processing : Xử lý message và tìm next node
-    responding : Tạo phản hồi từ bot
-    unmatched : Xử lý message không match
-    ended : Kết thúc workflow
+    unmatched --> waiting : always
+    unmatched --> processing : USER_MESSAGE
+    
+    ended --> [*]
 ```
 
-### 2. Context Structure
+---
 
+## 🧠 **Enhanced Matching Logic**
+
+### **Matching Priority Order**
+```typescript
+function matchesNodeContent(node: WorkflowNode, userInput: string): boolean {
+  const input = userInput.toLowerCase().trim();
+  
+  // 1. 🚀 START NODE DETECTION
+  if (isStartNode(node) && hasStartKeywords(input)) {
+    return true;
+  }
+  
+  // 2. 🎯 EXACT PAYLOAD MATCHING
+  if (hasExactPayloadMatch(node, userInput)) {
+    return true;
+  }
+  
+  // 3. 📝 TITLE-BASED MATCHING
+  if (hasTitleMatch(node, input)) {
+    return true;
+  }
+  
+  // 4. 📄 CONTENT MATCHING
+  if (hasContentMatch(node, input)) {
+    return true;
+  }
+  
+  // 5. 🎭 SPECIAL NODE TYPES
+  if (hasSpecialNodeMatch(node, input)) {
+    return true;
+  }
+  
+  return false;
+}
+```
+
+### **Start Node Keywords**
+```typescript
+const START_KEYWORDS = [
+  // Vietnamese
+  'start', 'bắt đầu', 'khởi động', 'reset', 'restart', 
+  'về đầu', 'quay lại', 'chào', 'xin chào', 
+  'menu chính', 'trang chủ',
+  
+  // English
+  'hello', 'hi', 'hey', 'start over', 'begin',
+  'main menu', 'home', 'back to start'
+];
+```
+
+### **Button-to-Edge Mapping Algorithm**
+```typescript
+function findNextNode(currentNodeId: string, userInput?: string) {
+  const outgoingEdges = edges.filter(edge => edge.source === currentNodeId);
+  
+  if (userInput && matchesCurrentNode(userInput)) {
+    // For exact payload matches
+    const buttonMatch = findButtonMatch(currentNode, userInput);
+    if (buttonMatch) {
+      // Try sourceHandle first, then button index mapping
+      let edge = outgoingEdges.find(e => e.sourceHandle === buttonMatch.payload);
+      
+      if (!edge && outgoingEdges.length > 1) {
+        // Use button index to select corresponding edge
+        const buttonIndex = getButtonIndex(buttonMatch);
+        edge = outgoingEdges[buttonIndex] || outgoingEdges[0];
+      }
+      
+      return edge?.target || null;
+    }
+  }
+  
+  // Fallback search in all nodes (start node prioritized)
+  return fallbackSearch(userInput);
+}
+```
+
+---
+
+## 📊 **Context Management**
+
+### **WorkflowContext Interface**
 ```typescript
 interface WorkflowContext {
-  // Navigation state
-  currentNodeId: string;              // Node hiện tại trong workflow
+  // Navigation
+  currentNodeId: string;
+  messageMatchedWorkflow: boolean;
   
-  // Message data
-  userMessage: string;                // Tin nhắn từ user
-  botResponse: string;                // Phản hồi từ bot
+  // Communication
+  userMessage: string;
+  botResponse: string;
   
-  // Workflow execution
-  messageMatchedWorkflow: boolean;    // Message có match với workflow không
+  // User data
+  facebookUserId: string;
+  variables: Record<string, any>;
   
-  // User session
-  facebookUserId: string;             // ID Facebook user
-  
-  // Dynamic variables
-  variables: Record<string, any>;     // Biến động trong workflow
-  
-  // Conversation tracking
+  // History tracking
   conversationHistory: Array<{
     message: string;
     isFromUser: boolean;
@@ -58,188 +188,34 @@ interface WorkflowContext {
 }
 ```
 
-### 3. Event Types
-
+### **Context Updates**
 ```typescript
-type WorkflowEvent =
-  | { type: 'USER_MESSAGE'; message: string }    // User gửi tin nhắn
-  | { type: 'NEXT_NODE'; nodeId?: string }       // Chuyển đến node tiếp theo
-  | { type: 'RESET' }                            // Reset workflow
-  | { type: 'SET_VARIABLE'; variables: Record<string, any> }; // Set biến
-```
-
-## Message Matching Algorithm
-
-### 1. Thuật Toán Chi Tiết
-
-```mermaid
-flowchart TD
-    A[User Message Input] --> B[Get Current Node]
-    B --> C{Check Current Node Buttons}
-    C -->|Match Found| D[Return Target Node]
-    C -->|No Match| E{Check Current Node Quick Replies}
-    E -->|Match Found| D
-    E -->|No Match| F{Check Current Node Elements}
-    F -->|Match Found| D
-    F -->|No Match| G[FALLBACK: Search All Nodes]
-    
-    G --> H{Check All Buttons in All Nodes}
-    H -->|Match Found| I[Return Matched Node]
-    H -->|No Match| J{Check All Quick Replies}
-    J -->|Match Found| I
-    J -->|No Match| K{Check All Elements}
-    K -->|Match Found| I
-    K -->|No Match| L[No Match - Return null]
-    
-    D --> M{Has Valid Target?}
-    I --> M
-    M -->|Yes| N[Navigate to Target Node]
-    M -->|No| O[Stay at Current Node]
-    L --> P[Unmatched State]
-```
-
-### 2. Implementation Code Flow
-
-```typescript
-// Simplified version of findNextNode function
-const findNextNode = (currentNodeId: string, userInput?: string): 
-  { nodeId: string | null, matched: boolean } => {
-  
-  // 1. KIỂM TRA NODE HIỆN TẠI
-  const currentNode = findNode(currentNodeId);
-  
-  if (userInput && currentNode) {
-    // Check buttons
-    const matchedButton = currentNode.data.buttons?.find(
-      button => button.payload === userInput
-    );
-    if (matchedButton) {
-      const edge = findEdgeByPayload(currentNodeId, matchedButton.payload);
-      if (edge) return { nodeId: edge.target, matched: true };
-    }
-    
-    // Check quick replies
-    const matchedQuickReply = currentNode.data.quickReplies?.find(
-      reply => reply.payload === userInput
-    );
-    if (matchedQuickReply) {
-      const edge = findEdgeByPayload(currentNodeId, matchedQuickReply.payload);
-      if (edge) return { nodeId: edge.target, matched: true };
-    }
-    
-    // Check elements system
-    for (const element of currentNode.data.elements || []) {
-      if (element.type === 'button' && element.payload === userInput) {
-        const edge = findEdgeByPayload(currentNodeId, element.payload);
-        if (edge) return { nodeId: edge.target, matched: true };
+// Entry actions cho các states
+const contextActions = {
+  waiting: assign({
+    userMessage: ({ event }) => event.message,
+    conversationHistory: ({ context, event }) => [
+      ...context.conversationHistory,
+      {
+        message: event.message,
+        isFromUser: true,
+        timestamp: new Date(),
       }
-    }
-  }
+    ]
+  }),
   
-  // 2. FALLBACK: TÌM KIẾM TẤT CẢ NODES
-  for (const node of nodes) {
-    if (node.id === currentNodeId) continue;
-    
-    // Tương tự logic kiểm tra cho tất cả nodes
-    // ...
-  }
-  
-  return { nodeId: null, matched: false };
-};
-```
-
-## State Machine States
-
-### 1. WAITING State
-
-```typescript
-waiting: {
-  on: {
-    USER_MESSAGE: {
-      target: 'processing',
-      actions: assign({
-        userMessage: ({ event }) => event.message,
-        conversationHistory: ({ context, event }) => [
-          ...context.conversationHistory,
-          {
-            message: event.message,
-            isFromUser: true,
-            timestamp: new Date(),
-          },
-        ],
-      }),
-    },
-    RESET: {
-      target: 'waiting',
-      actions: assign({
-        currentNodeId: startNodeId,
-        userMessage: '',
-        botResponse: '',
-        variables: {},
-        conversationHistory: [],
-        messageMatchedWorkflow: false,
-      }),
-    },
-  },
-}
-```
-
-**Nhiệm vụ:**
-- Chờ input từ user
-- Lưu user message vào context
-- Cập nhật conversation history
-- Hỗ trợ reset workflow
-
-### 2. PROCESSING State
-
-```typescript
-processing: {
-  entry: assign({
+  processing: assign({
     currentNodeId: ({ context }) => {
-      const { nodeId, matched } = findNextNode(context.currentNodeId, context.userMessage);
+      const { nodeId } = findNextNode(context.currentNodeId, context.userMessage);
       return nodeId || context.currentNodeId;
     },
     messageMatchedWorkflow: ({ context }) => {
-      const { nodeId, matched } = findNextNode(context.currentNodeId, context.userMessage);
+      const { matched } = findNextNode(context.currentNodeId, context.userMessage);
       return matched;
-    },
+    }
   }),
-  always: [
-    {
-      target: 'responding',
-      guard: ({ context }) => {
-        const currentNode = findNode(context.currentNodeId);
-        return !!currentNode?.data.message && context.messageMatchedWorkflow;
-      },
-    },
-    {
-      target: 'unmatched',
-      guard: ({ context }) => !context.messageMatchedWorkflow,
-    },
-    {
-      target: 'ended',
-      guard: ({ context }) => {
-        const outgoingEdges = edges.filter((edge) => edge.source === context.currentNodeId);
-        return outgoingEdges.length === 0;
-      },
-    },
-    {
-      target: 'waiting',
-    },
-  ],
-}
-```
-
-**Logic Flow:**
-1. **Entry Action**: Tìm next node và cập nhật match status
-2. **Guards**: Kiểm tra điều kiện để chuyển state
-3. **Transitions**: Chuyển đến state phù hợp
-
-### 3. RESPONDING State
-
-```typescript
-responding: {
-  entry: assign({
+  
+  responding: assign({
     botResponse: ({ context }) => {
       const currentNode = findNode(context.currentNodeId);
       return currentNode?.data.message || 'No response available';
@@ -250,82 +226,203 @@ responding: {
         message: context.botResponse,
         isFromUser: false,
         timestamp: new Date(),
-      },
-    ],
-  }),
-  on: {
-    NEXT_NODE: {
-      target: 'waiting',
-    },
-  },
-}
+      }
+    ]
+  })
+};
 ```
 
-**Nhiệm vụ:**
-- Generate bot response từ current node
-- Cập nhật conversation history
-- Chờ trigger NEXT_NODE để tiếp tục
+---
 
-### 4. UNMATCHED State
+## 🔍 **Enhanced Debug System**
 
+### **Debug Logging Levels**
 ```typescript
-unmatched: {
-  entry: assign({
-    botResponse: 'Xin lỗi, tôi không hiểu yêu cầu của bạn.',
-  }),
-  always: {
-    target: 'waiting',
-  },
+enum DebugLevel {
+  WORKFLOW = '[WORKFLOW DEBUG]',
+  FINDNODE = '[FINDNODE DEBUG]',
+  MATCHER = '[MATCHER DEBUG]',
+  EDGE = '[EDGE DEBUG]',
+  BUTTON = '[BUTTON DEBUG]'
 }
 ```
 
-**Xử lý:**
-- Tin nhắn không match với bất kỳ node nào
-- Trả về default response
-- Quay về WAITING state
-
-### 5. ENDED State
-
+### **Comprehensive Debug Output**
 ```typescript
-ended: {
-  type: 'final',
-  entry: assign({
-    botResponse: 'Cảm ơn bạn đã sử dụng dịch vụ!',
-  }),
+function debugNodeMatching(node: WorkflowNode, userInput: string) {
+  console.log(`${DebugLevel.WORKFLOW} Checking node ${node.id} (${node.data.label}) against input: "${userInput}"`);
+  
+  // Start node detection
+  if (isStartNode(node)) {
+    console.log(`${DebugLevel.WORKFLOW} This is a START NODE`);
+  }
+  
+  // Button analysis
+  if (node.data.buttons) {
+    console.log(`${DebugLevel.BUTTON} Node has ${node.data.buttons.length} legacy buttons:`, node.data.buttons);
+    node.data.buttons.forEach((button, index) => {
+      const payloadMatch = button.payload === userInput;
+      const titleMatch = button.title.toLowerCase().includes(userInput.toLowerCase());
+      console.log(`${DebugLevel.BUTTON} Button[${index}] "${button.title}" (payload: "${button.payload}") - Payload: ${payloadMatch}, Title: ${titleMatch}`);
+    });
+  }
+  
+  // Element analysis
+  if (node.data.elements) {
+    console.log(`${DebugLevel.WORKFLOW} Node has ${node.data.elements.length} elements:`, node.data.elements);
+    // ... detailed element analysis
+  }
 }
 ```
 
-**Kết thúc:**
-- Workflow hoàn thành (không có outgoing edges)
-- State machine kết thúc
-
-## WorkflowMachineService
-
-### 1. Service Architecture
-
-```mermaid
-classDiagram
-    class WorkflowMachineService {
-        -machines: Map<string, XStateActor>
-        +createWorkflowInstance(sessionId, nodes, edges, startNodeId)
-        +getWorkflowInstance(sessionId)
-        +removeWorkflowInstance(sessionId)
-        +sendMessage(sessionId, message)
-        +getCurrentState(sessionId)
-    }
-    
-    class XStateActor {
-        +send(event)
-        +getSnapshot()
-        +subscribe(callback)
-        +stop()
-    }
-    
-    WorkflowMachineService --> XStateActor : manages
+### **Edge Selection Debug**
+```typescript
+function debugEdgeSelection(buttonIndex: number, edges: WorkflowEdge[], selectedEdge: WorkflowEdge) {
+  console.log(`${DebugLevel.EDGE} Button index: ${buttonIndex}`);
+  console.log(`${DebugLevel.EDGE} Available edges:`, edges);
+  console.log(`${DebugLevel.EDGE} Selected edge:`, selectedEdge);
+  console.log(`${DebugLevel.EDGE} Target node: ${selectedEdge.target}`);
+}
 ```
 
-### 2. Instance Management
+---
 
+## 🎯 **Advanced Matching Features**
+
+### **Element Type Support**
+```typescript
+interface WorkflowElement {
+  type: 'button' | 'quick_reply' | 'text' | 'image' | 'video' | 'file' | 'generic_card' | 'list_item';
+  
+  // Common properties
+  title?: string;
+  payload?: string;
+  
+  // Type-specific properties
+  content?: string;              // text
+  imageUrl?: string;            // image
+  fileUrl?: string;             // video, file
+  quickReplyPayload?: string;   // quick_reply
+  subtitle?: string;            // generic_card, list_item
+  buttons?: Button[];           // generic_card
+}
+```
+
+### **Element Matching Logic**
+```typescript
+function matchElement(element: WorkflowElement, userInput: string): boolean {
+  const input = userInput.toLowerCase();
+  
+  switch (element.type) {
+    case 'button':
+      return element.payload === userInput || 
+             element.title?.toLowerCase() === input;
+             
+    case 'quick_reply':
+      return element.quickReplyPayload === userInput ||
+             element.title?.toLowerCase() === input;
+             
+    case 'text':
+      return element.content?.toLowerCase().includes(input);
+      
+    case 'image':
+    case 'video':
+    case 'file':
+      return element.title?.toLowerCase().includes(input) ||
+             element.fileUrl?.toLowerCase().includes(input);
+             
+    case 'generic_card':
+      return element.title?.toLowerCase().includes(input) ||
+             element.subtitle?.toLowerCase().includes(input) ||
+             element.buttons?.some(btn => matchButton(btn, userInput));
+             
+    case 'list_item':
+      return element.title?.toLowerCase().includes(input) ||
+             element.subtitle?.toLowerCase().includes(input);
+             
+    default:
+      return false;
+  }
+}
+```
+
+### **Receipt Node Handling**
+```typescript
+function matchReceiptNode(node: WorkflowNode, userInput: string): boolean {
+  if (node.data.messageType !== 'receipt') return false;
+  
+  const input = userInput.toLowerCase();
+  
+  // Receipt keywords
+  const receiptKeywords = [
+    'receipt', 'bill', 'order', 'payment', 'invoice',
+    'hóa đơn', 'đơn hàng', 'thanh toán'
+  ];
+  
+  if (receiptKeywords.some(keyword => input.includes(keyword))) {
+    return true;
+  }
+  
+  // Receipt-specific fields
+  const recipientMatch = node.data.recipientName?.toLowerCase().includes(input);
+  const orderMatch = node.data.orderNumber?.toLowerCase().includes(input);
+  
+  return recipientMatch || orderMatch;
+}
+```
+
+---
+
+## 🔄 **Fallback Search Strategy**
+
+### **Prioritized Node Search**
+```typescript
+function fallbackSearch(userInput: string): { nodeId: string | null, matched: boolean } {
+  console.log(`${DebugLevel.FINDNODE} Searching in all nodes for fallback match...`);
+  
+  // Create prioritized search list
+  const startNode = findNode(startNodeId);
+  const otherNodes = nodes.filter(node => 
+    node.id !== currentNodeId && node.id !== startNodeId
+  );
+  const nodesToSearch = startNode ? [startNode, ...otherNodes] : otherNodes;
+  
+  console.log(`${DebugLevel.FINDNODE} Searching in ${nodesToSearch.length} nodes (start node first)`);
+  
+  // Enhanced matching for all nodes
+  for (const node of nodesToSearch) {
+    console.log(`${DebugLevel.FINDNODE} Checking fallback node: ${node.id} (${node.data.label})`);
+    
+    if (matchesNodeContent(node, userInput)) {
+      console.log(`${DebugLevel.FINDNODE} ✅ Found fallback match in node: ${node.id}`);
+      return { nodeId: node.id, matched: true };
+    }
+  }
+  
+  console.log(`${DebugLevel.FINDNODE} ❌ No match found anywhere in workflow`);
+  return { nodeId: null, matched: false };
+}
+```
+
+### **Start Node Accessibility**
+```typescript
+function checkStartKeywords(userInput: string): boolean {
+  const input = userInput.toLowerCase().trim();
+  const startKeywords = [
+    'start', 'bắt đầu', 'khởi động', 'reset', 'restart', 
+    'về đầu', 'quay lại', 'chào', 'hello', 'hi', 'xin chào', 
+    'menu chính', 'trang chủ'
+  ];
+  
+  return startKeywords.some(keyword => input.includes(keyword));
+}
+```
+
+---
+
+## 🛠️ **Machine Service Management**
+
+### **WorkflowMachineService Class**
 ```typescript
 export class WorkflowMachineService {
   private machines: Map<string, ActorRefFrom<ReturnType<typeof createWorkflowMachine>>> = new Map();
@@ -336,347 +433,272 @@ export class WorkflowMachineService {
     edges: WorkflowEdge[],
     startNodeId: string,
   ) {
-    // Tạo machine definition
     const machine = createWorkflowMachine(nodes, edges, startNodeId);
+    const service = interpret(machine);
     
-    // Tạo actor instance
-    const actor = interpret(machine).start();
+    this.machines.set(sessionId, service);
+    service.start();
     
-    // Lưu vào Map để quản lý
-    this.machines.set(sessionId, actor);
-    
-    return actor;
+    return service;
   }
 
-  getWorkflowInstance(sessionId: string) {
-    return this.machines.get(sessionId);
+  sendMessage(sessionId: string, message: string) {
+    const service = this.machines.get(sessionId);
+    if (service) {
+      service.send({ type: 'USER_MESSAGE', message });
+      return service.getSnapshot().context;
+    }
+    return null;
+  }
+
+  getCurrentState(sessionId: string) {
+    const service = this.machines.get(sessionId);
+    return service?.getSnapshot().context || null;
   }
 
   removeWorkflowInstance(sessionId: string) {
-    const machine = this.machines.get(sessionId);
-    if (machine) {
-      machine.stop();
+    const service = this.machines.get(sessionId);
+    if (service) {
+      service.stop();
       this.machines.delete(sessionId);
     }
   }
 }
 ```
 
-### 3. Session Lifecycle
+---
 
-```mermaid
-sequenceDiagram
-    participant CS as ChatService
-    participant WMS as WorkflowMachineService
-    participant XS as XStateActor
-    participant DB as Database
+## 📈 **Performance Optimizations**
 
-    Note over CS,DB: New Chat Session
-    CS->>WMS: createWorkflowInstance(sessionId, nodes, edges, startNodeId)
-    WMS->>XS: interpret(machine).start()
-    WMS->>WMS: machines.set(sessionId, actor)
-    
-    Note over CS,DB: Message Processing
-    CS->>WMS: sendMessage(sessionId, message)
-    WMS->>XS: actor.send({ type: 'USER_MESSAGE', message })
-    XS->>XS: State transition processing
-    XS->>WMS: Return updated state
-    WMS->>CS: Return response
-    CS->>DB: Save conversation
-    
-    Note over CS,DB: Session End
-    CS->>WMS: removeWorkflowInstance(sessionId)
-    WMS->>XS: actor.stop()
-    WMS->>WMS: machines.delete(sessionId)
-```
-
-## Node Types và Data Processing
-
-### 1. Legacy Node Structure
-
+### **Caching Strategy**
 ```typescript
-interface LegacyNode {
-  id: string;
-  type: string;
-  data: {
-    label: string;
-    message?: string;
-    buttons?: Array<{
-      title: string;
-      payload: string;
-    }>;
-    quickReplies?: Array<{
-      title: string;
-      payload: string;
-      imageUrl?: string;
-    }>;
+interface MachineCache {
+  compiledWorkflows: Map<string, CompiledMachine>;
+  sessionInstances: Map<string, MachineInstance>;
+  nodeIndexes: Map<string, NodeIndex>;
+}
+
+class OptimizedMachineService {
+  private cache: MachineCache = {
+    compiledWorkflows: new Map(),
+    sessionInstances: new Map(),
+    nodeIndexes: new Map()
   };
+  
+  getCachedMachine(workflowId: string): CompiledMachine | null {
+    return this.cache.compiledWorkflows.get(workflowId) || null;
+  }
+  
+  buildNodeIndex(nodes: WorkflowNode[]): NodeIndex {
+    return nodes.reduce((index, node) => {
+      // Index by ID
+      index.byId[node.id] = node;
+      
+      // Index by type
+      if (!index.byType[node.type]) {
+        index.byType[node.type] = [];
+      }
+      index.byType[node.type].push(node);
+      
+      // Index by content for faster searching
+      if (node.data.message) {
+        index.byContent[node.data.message.toLowerCase()] = node;
+      }
+      
+      return index;
+    }, { byId: {}, byType: {}, byContent: {} });
+  }
 }
 ```
 
-### 2. New Elements System
-
+### **Memory Management**
 ```typescript
-interface ModernNode {
-  id: string;
-  type: string;
-  data: {
-    label: string;
-    elements?: Array<{
-      type: 'text' | 'image' | 'video' | 'button' | 'quick_reply' | 'generic_card';
-      content?: string;
-      title?: string;
-      subtitle?: string;
-      imageUrl?: string;
-      payload?: string;
-      url?: string;
-      buttons?: Array<{
-        type: 'postback' | 'web_url' | 'phone_number';
-        title: string;
-        payload?: string;
-        url?: string;
-      }>;
-    }>;
-  };
-}
-```
-
-### 3. Response Generation Flow
-
-```mermaid
-flowchart TD
-    A[Current Node Data] --> B{Has Elements?}
-    B -->|Yes| C[Process Elements System]
-    B -->|No| D{Has Legacy Buttons?}
+class SessionManager {
+  private readonly MAX_SESSIONS = 1000;
+  private readonly SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
+  
+  cleanupExpiredSessions() {
+    const now = Date.now();
     
-    C --> E[Generate Modern Response]
-    D -->|Yes| F[Process Legacy Buttons]
-    D -->|No| G[Simple Text Response]
-    F --> H[Generate Legacy Response]
-    
-    E --> I[Facebook Messenger Format]
-    H --> I
-    G --> I
-    
-    I --> J{Response Type}
-    J -->|Text| K[Text Message]
-    J -->|Buttons| L[Button Template]
-    J -->|Quick Replies| M[Quick Reply Template]
-    J -->|Cards| N[Generic Template]
-    J -->|Media| O[Attachment Template]
-```
-
-## Integration với Chat Service
-
-### 1. Message Processing Pipeline
-
-```typescript
-async processMessage(
-  facebookUserId: string,
-  message: string,
-  workflowId?: string,
-): Promise<ChatResponse> {
-  
-  // 1. Find or create session
-  const session = await this.findOrCreateSession(facebookUserId, workflowId);
-  
-  // 2. Load workflow
-  const workflow = await this.loadWorkflow(session.workflowId);
-  
-  // 3. Detect button/quick reply
-  const { isButton, buttonTitle } = this.detectInteraction(message, workflow, session);
-  
-  // 4. Save user message
-  await this.saveMessage(session.id, facebookUserId, 
-    isButton ? buttonTitle : message, true, 
-    isButton ? 'button' : 'text'
-  );
-  
-  // 5. Get or create XState instance
-  let workflowInstance = this.workflowMachine.getWorkflowInstance(session.id);
-  if (!workflowInstance) {
-    const startNode = this.findStartNode(workflow.nodes);
-    workflowInstance = this.workflowMachine.createWorkflowInstance(
-      session.id, workflow.nodes, workflow.edges, startNode.id
-    );
-  }
-  
-  // 6. Send message to XState
-  workflowInstance.send({ type: 'USER_MESSAGE', message });
-  
-  // 7. Get current state and generate response
-  const currentState = workflowInstance.getSnapshot();
-  const botResponse = this.generateResponse(currentState, session.id);
-  
-  // 8. Save bot message
-  await this.saveMessage(session.id, facebookUserId, 
-    botResponse.text || '', false, botResponse.messageType
-  );
-  
-  return botResponse;
-}
-```
-
-### 2. Response Generation
-
-```typescript
-private generateMessengerResponse(node: any, sessionId: string, context: any): ChatResponse {
-  const response: ChatResponse = {
-    sessionId,
-    workflowEnded: false,
-    inWorkFlowMsg: true,
-    messageType: 'text',
-  };
-
-  // Process elements system (modern approach)
-  if (node.data.elements && node.data.elements.length > 0) {
-    return this.processElementsSystem(node.data.elements, response);
-  }
-  
-  // Fallback to legacy system
-  if (node.data.buttons && node.data.buttons.length > 0) {
-    return this.processLegacyButtons(node.data, response);
-  }
-  
-  if (node.data.quickReplies && node.data.quickReplies.length > 0) {
-    return this.processLegacyQuickReplies(node.data, response);
-  }
-  
-  // Simple text message
-  response.text = node.data.message || 'No message available';
-  return response;
-}
-```
-
-## Error Handling và Debugging
-
-### 1. Error States
-
-```mermaid
-stateDiagram-v2
-    [*] --> NormalFlow
-    
-    NormalFlow --> ErrorState : Exception
-    ErrorState --> LogError : Log details
-    LogError --> RecoveryAttempt : Try recover
-    
-    RecoveryAttempt --> NormalFlow : Success
-    RecoveryAttempt --> FallbackState : Failed
-    FallbackState --> [*] : End session
-    
-    state ErrorState {
-        [*] --> ValidationError
-        [*] --> DatabaseError
-        [*] --> XStateError
-        [*] --> ExternalAPIError
-    }
-```
-
-### 2. Debugging Tools
-
-```typescript
-// XState Inspector Integration (development)
-const machine = createWorkflowMachine(nodes, edges, startNodeId).provide({
-  inspect: {
-    // Enable XState inspector for debugging
-    url: 'https://stately.ai/registry/editor/...',
-    iframe: false,
-  },
-});
-
-// Logging cho state transitions
-const actor = interpret(machine, {
-  logger: (msg) => {
-    console.log(`[XState ${sessionId}]:`, msg);
-  },
-}).start();
-
-// Error handling
-actor.subscribe({
-  error: (error) => {
-    console.error(`[XState Error ${sessionId}]:`, error);
-    // Send to monitoring service
-    this.monitoringService.logError('xstate_error', error, { sessionId });
-  },
-});
-```
-
-### 3. Performance Monitoring
-
-```typescript
-// Metrics collection
-const startTime = Date.now();
-
-workflowInstance.send({ type: 'USER_MESSAGE', message });
-
-const processingTime = Date.now() - startTime;
-
-// Log performance metrics
-this.metricsService.histogram('xstate_processing_time', processingTime, {
-  workflow_id: workflowId,
-  node_type: currentNode.type,
-});
-```
-
-## Best Practices
-
-### 1. State Machine Design
-
-- **Single Responsibility**: Mỗi state có một nhiệm vụ cụ thể
-- **Predictable Transitions**: Guards và conditions rõ ràng
-- **Error Boundaries**: Xử lý lỗi ở từng state
-- **Resource Cleanup**: Proper cleanup khi kết thúc workflow
-
-### 2. Memory Management
-
-```typescript
-// Cleanup strategy for long-running sessions
-const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
-
-setInterval(() => {
-  const now = Date.now();
-  for (const [sessionId, lastActivity] of this.sessionActivity.entries()) {
-    if (now - lastActivity > SESSION_TIMEOUT) {
-      this.workflowMachine.removeWorkflowInstance(sessionId);
-      this.sessionActivity.delete(sessionId);
+    for (const [sessionId, instance] of this.machines.entries()) {
+      const lastActivity = instance.lastActivity || 0;
+      
+      if (now - lastActivity > this.SESSION_TTL) {
+        this.removeWorkflowInstance(sessionId);
+        console.log(`[CLEANUP] Removed expired session: ${sessionId}`);
+      }
     }
   }
-}, 5 * 60 * 1000); // Check every 5 minutes
+  
+  enforceSessionLimit() {
+    if (this.machines.size > this.MAX_SESSIONS) {
+      // Remove oldest sessions
+      const sessions = Array.from(this.machines.entries())
+        .sort(([,a], [,b]) => (a.lastActivity || 0) - (b.lastActivity || 0))
+        .slice(0, this.machines.size - this.MAX_SESSIONS);
+        
+      sessions.forEach(([sessionId]) => {
+        this.removeWorkflowInstance(sessionId);
+      });
+    }
+  }
+}
 ```
 
-### 3. Testing Strategy
+---
 
+## 🧪 **Testing Strategy**
+
+### **Unit Tests**
 ```typescript
-// Unit tests for state machine
-describe('WorkflowMachine', () => {
-  it('should transition from waiting to processing on USER_MESSAGE', () => {
-    const machine = createWorkflowMachine(mockNodes, mockEdges, 'start');
-    const actor = interpret(machine).start();
+describe('XState Workflow Engine', () => {
+  describe('matchesNodeContent', () => {
+    it('should match exact payload', () => {
+      const node = createTestNode({
+        buttons: [{ title: 'Menu', payload: 'MENU' }]
+      });
+      
+      expect(matchesNodeContent(node, 'MENU')).toBe(true);
+    });
     
-    actor.send({ type: 'USER_MESSAGE', message: 'hello' });
+    it('should match case-insensitive title', () => {
+      const node = createTestNode({
+        buttons: [{ title: 'Menu', payload: 'MENU' }]
+      });
+      
+      expect(matchesNodeContent(node, 'menu')).toBe(true);
+    });
     
-    expect(actor.getSnapshot().value).toBe('processing');
+    it('should prioritize start keywords', () => {
+      const node = createTestNode({ id: startNodeId });
+      
+      expect(matchesNodeContent(node, 'bắt đầu')).toBe(true);
+      expect(matchesNodeContent(node, 'start')).toBe(true);
+    });
   });
   
-  it('should handle unmatched messages', () => {
-    // Test unmatched state handling
-  });
-  
-  it('should complete workflow when reaching end node', () => {
-    // Test workflow completion
+  describe('findNextNode', () => {
+    it('should map button to correct edge', () => {
+      const result = findNextNode('node1', 'MENU');
+      
+      expect(result.nodeId).toBe('menu-node');
+      expect(result.matched).toBe(true);
+    });
+    
+    it('should handle fallback search', () => {
+      const result = findNextNode('node1', 'unknown');
+      
+      expect(result.matched).toBe(false);
+    });
   });
 });
 ```
 
-## Kết Luận
+### **Integration Tests**
+```typescript
+describe('Workflow Machine Integration', () => {
+  it('should process complete conversation flow', async () => {
+    const machine = createWorkflowMachine(testNodes, testEdges, 'start');
+    const service = interpret(machine);
+    
+    service.start();
+    
+    // Send first message
+    service.send({ type: 'USER_MESSAGE', message: 'hello' });
+    expect(service.getSnapshot().context.currentNodeId).toBe('start');
+    
+    // Send button click
+    service.send({ type: 'USER_MESSAGE', message: 'MENU' });
+    expect(service.getSnapshot().context.currentNodeId).toBe('menu-node');
+    
+    service.stop();
+  });
+});
+```
 
-XState Workflow Engine cung cấp:
+---
 
-1. **Predictable State Management**: State transitions rõ ràng và có thể debug
-2. **Flexible Node System**: Hỗ trợ cả legacy và modern node structures
-3. **Robust Message Matching**: Algorithm phức tạp để match user input
-4. **Scalable Architecture**: Instance management cho multiple sessions
-5. **Error Resilience**: Comprehensive error handling và recovery
-6. **Performance Monitoring**: Built-in metrics và logging
+## 🚀 **Future Enhancements**
 
-Engine này là foundation để xây dựng các chatbot workflow phức tạp với khả năng maintain và extend cao. 
+### **Machine Learning Integration**
+```typescript
+interface MLEnhancedMatcher {
+  intentRecognition(userInput: string): Intent;
+  entityExtraction(userInput: string): Entity[];
+  confidenceScoring(matches: Match[]): ScoredMatch[];
+  adaptiveLearning(feedback: UserFeedback): void;
+}
+```
+
+### **Advanced Analytics**
+```typescript
+interface WorkflowAnalytics {
+  nodeVisitFrequency: Record<string, number>;
+  conversionPaths: ConversionPath[];
+  userDropoffPoints: DropoffAnalysis[];
+  performanceMetrics: PerformanceData;
+}
+```
+
+### **Multi-language Support**
+```typescript
+interface I18nMatcher {
+  detectLanguage(userInput: string): Language;
+  translateKeywords(keywords: string[], targetLang: Language): string[];
+  localizeResponses(response: string, userLang: Language): string;
+}
+```
+
+---
+
+## 📊 **Monitoring & Metrics**
+
+### **Performance Metrics**
+```typescript
+interface MachineMetrics {
+  averageProcessingTime: number;
+  matchingAccuracy: number;
+  fallbackSearchRate: number;
+  memoryUsage: number;
+  activeSessions: number;
+}
+```
+
+### **Debug Tracing**
+```typescript
+interface ExecutionTrace {
+  sessionId: string;
+  timestamp: Date;
+  userInput: string;
+  currentNode: string;
+  targetNode: string;
+  matchingPath: string[];
+  processingTime: number;
+  success: boolean;
+}
+```
+
+---
+
+## 📝 **Best Practices**
+
+### **Workflow Design Guidelines**
+1. **Clear Node Structure**: Mỗi node có purpose rõ ràng
+2. **Consistent Payload Naming**: Sử dụng naming convention
+3. **Comprehensive Coverage**: Handle tất cả user paths
+4. **Fallback Strategies**: Luôn có fallback cho unmatched inputs
+5. **Performance Optimization**: Minimize complex matching logic
+
+### **Debugging Tips**
+1. **Enable Debug Logs**: Sử dụng console.log để trace matching
+2. **Test Edge Cases**: Kiểm tra các scenarios đặc biệt
+3. **Monitor Fallback Rate**: Track unmatched message frequency
+4. **Validate Workflow Structure**: Ensure proper node connections
+5. **Performance Profiling**: Monitor processing times
+
+### **Maintenance Recommendations**
+1. **Regular Cleanup**: Remove expired sessions
+2. **Cache Optimization**: Update cached workflows when changed
+3. **Memory Monitoring**: Track memory usage patterns
+4. **Error Handling**: Implement robust error recovery
+5. **Documentation Updates**: Keep documentation current với code changes 

@@ -1,500 +1,499 @@
-# Sơ Đồ Thiết Kế Hệ Thống - Chatbot Workflow Platform
+# System Architecture Documentation
 
-## Kiến Trúc Tổng Thể
+## 🏗️ **Tổng quan Kiến trúc Hệ thống**
+
+Chatbot Workflow Platform được thiết kế theo kiến trúc **microservice-oriented** với frontend và backend tách biệt, tích hợp với Facebook Messenger để tạo chatbot thông minh.
+
+---
+
+## 📊 **High-Level Architecture**
 
 ```mermaid
 graph TB
-    subgraph "Client Layer"
-        A[React Frontend]
-        B[Facebook Messenger]
-        C[Webhook Integrations]
-    end
+    User[👤 User] --> Frontend[🖥️ React Frontend]
+    FB_User[👤 Facebook User] --> FB_Messenger[💬 Facebook Messenger]
     
-    subgraph "API Gateway"
-        D[Load Balancer]
-        E[Rate Limiting]
-        F[SSL Termination]
-    end
+    Frontend --> LB[🔄 Load Balancer]
+    FB_Messenger --> FB_Webhook[🪝 Facebook Webhook]
     
-    subgraph "Application Layer"
-        G[NestJS Backend]
-        H[Auth Service]
-        I[Workflow Engine]
-        J[Chat Service]
-        K[XState Machine]
-    end
+    LB --> Backend[🚀 NestJS Backend]
+    FB_Webhook --> Backend
     
-    subgraph "Data Layer"
-        L[PostgreSQL]
-        M[Redis Cache]
-        N[File Storage]
+    Backend --> DB[(🗄️ PostgreSQL)]
+    Backend --> XState[⚙️ XState Engine]
+    Backend --> FB_API[📱 Facebook Graph API]
+    
+    subgraph "Core Services"
+        Backend --> Auth[🔐 Auth Service]
+        Backend --> Workflow[🔄 Workflow Service]
+        Backend --> Chat[💬 Chat Service]
+        Backend --> Facebook[📘 Facebook Service]
     end
     
     subgraph "External Services"
-        O[Facebook Graph API]
-        P[N8N Workflows]
-        Q[Monitoring Services]
+        FB_API
+        Redis[(⚡ Redis Cache)]
+        Monitoring[📊 Monitoring]
     end
     
-    A --> D
-    B --> D
-    C --> D
-    D --> G
-    G --> H
-    G --> I
-    G --> J
-    I --> K
-    J --> K
-    G --> L
-    G --> M
-    G --> N
-    B --> O
-    G --> P
-    G --> Q
+    Backend --> Redis
+    Backend --> Monitoring
 ```
 
-## Component Architecture
+---
 
-```mermaid
-C4Component
-    title Component Diagram - Chatbot Workflow System
-    
-    Container_Boundary(c1, "NestJS Application") {
-        Component(auth, "Auth Module", "NestJS", "Handles user authentication and authorization")
-        Component(workflow, "Workflow Module", "NestJS", "Manages workflow CRUD operations")
-        Component(chat, "Chat Module", "NestJS", "Processes chat messages and executes workflows")
-        Component(xstate, "XState Engine", "XState", "State machine for workflow execution")
-        Component(entities, "Data Entities", "TypeORM", "Database entity definitions")
-    }
-    
-    Container_Boundary(c2, "Database Layer") {
-        Component(postgres, "PostgreSQL", "Database", "Primary data storage")
-        Component(redis, "Redis", "Cache", "Session and temporary data")
-    }
-    
-    Container_Boundary(c3, "External Systems") {
-        Component(facebook, "Facebook API", "REST API", "Messenger platform integration")
-        Component(n8n, "N8N", "Workflow", "External workflow automation")
-    }
-    
-    Rel(auth, entities, "Uses")
-    Rel(workflow, entities, "Uses")
-    Rel(chat, entities, "Uses")
-    Rel(chat, xstate, "Controls")
-    Rel(workflow, xstate, "Configures")
-    Rel(entities, postgres, "Persists to")
-    Rel(chat, redis, "Caches in")
-    Rel(chat, facebook, "Integrates with")
-    Rel(workflow, n8n, "Triggers")
+## 🎯 **Kiến trúc Layers**
+
+### **1. Presentation Layer (Frontend)**
+```
+┌─────────────────────────────────────────────┐
+│              React Frontend                 │
+├─────────────────────────────────────────────┤
+│  • Workflow Builder (ReactFlow)            │
+│  • User Management UI                      │
+│  • Facebook Integration UI                 │
+│  • Chat Testing Interface                  │
+│  • Authentication Forms                    │
+└─────────────────────────────────────────────┘
 ```
 
-## Request Flow Architecture
+### **2. API Gateway Layer**
+```
+┌─────────────────────────────────────────────┐
+│             NestJS Controllers              │
+├─────────────────────────────────────────────┤
+│  • REST API Endpoints                      │
+│  • Request Validation                      │
+│  • Authentication Guards                   │
+│  • Rate Limiting                           │
+│  • CORS Configuration                      │
+└─────────────────────────────────────────────┘
+```
 
+### **3. Business Logic Layer**
+```
+┌─────────────────────────────────────────────┐
+│              NestJS Services                │
+├─────────────────────────────────────────────┤
+│  • Workflow Management                     │
+│  • Chat Processing Engine                  │
+│  • User Authentication                     │
+│  • Facebook Integration                    │
+│  • XState Machine Management               │
+└─────────────────────────────────────────────┘
+```
+
+### **4. Data Access Layer**
+```
+┌─────────────────────────────────────────────┐
+│              TypeORM + Entities             │
+├─────────────────────────────────────────────┤
+│  • Database Abstraction                    │
+│  • Entity Relationships                    │
+│  • Query Optimization                      │
+│  • Migration Management                    │
+│  • Connection Pooling                      │
+└─────────────────────────────────────────────┘
+```
+
+### **5. Infrastructure Layer**
+```
+┌─────────────────────────────────────────────┐
+│           Database & External APIs          │
+├─────────────────────────────────────────────┤
+│  • PostgreSQL Database                     │
+│  • Redis Caching                           │
+│  • Facebook Graph API                      │
+│  • Monitoring Services                     │
+│  • File Storage                            │
+└─────────────────────────────────────────────┘
+```
+
+---
+
+## 🔄 **Data Flow Architecture**
+
+### **1. Workflow Creation Flow**
 ```mermaid
 sequenceDiagram
-    participant FBU as Facebook User
-    participant FB as Facebook Messenger
-    participant LB as Load Balancer
-    participant API as NestJS API
-    participant XS as XState Engine
-    participant DB as PostgreSQL
-    participant Cache as Redis
-
-    FBU->>FB: Send message
-    FB->>LB: Webhook POST /chat/webhook
-    LB->>API: Route request
+    participant User
+    participant Frontend
+    participant Backend
+    participant Database
+    participant XState
     
-    Note over API: Message Processing Pipeline
-    API->>DB: Find/Create session
-    API->>Cache: Check session cache
-    API->>DB: Load workflow configuration
-    API->>XS: Create/Get state machine instance
-    API->>XS: Send USER_MESSAGE event
-    
-    Note over XS: State Machine Processing
-    XS->>XS: WAITING → PROCESSING
-    XS->>XS: Find next node
-    XS->>XS: PROCESSING → RESPONDING
-    XS->>API: Return bot response
-    
-    API->>DB: Save conversation
-    API->>Cache: Update session state
-    API->>FB: Send response
-    FB->>FBU: Deliver message
+    User->>Frontend: Create/Edit Workflow
+    Frontend->>Backend: POST /workflows
+    Backend->>Backend: Validate workflow structure
+    Backend->>Database: Save workflow data
+    Backend->>XState: Validate state machine
+    Backend->>Frontend: Return workflow ID
+    Frontend->>User: Show success message
 ```
 
-## Deployment Architecture
-
+### **2. Chat Message Processing Flow**
 ```mermaid
-graph TB
-    subgraph "Production Environment"
-        subgraph "Frontend Tier"
-            A[React App]
-            B[CDN/Static Files]
-        end
-        
-        subgraph "Application Tier"
-            C[Load Balancer]
-            D[NestJS Instance 1]
-            E[NestJS Instance 2]
-            F[NestJS Instance N]
-        end
-        
-        subgraph "Data Tier"
-            G[PostgreSQL Primary]
-            H[PostgreSQL Replica]
-            I[Redis Cluster]
-        end
-        
-        subgraph "Monitoring"
-            J[Log Aggregation]
-            K[Metrics Collection]
-            L[Health Checks]
-        end
-    end
+sequenceDiagram
+    participant FB_User as Facebook User
+    participant FB_Messenger as Facebook Messenger
+    participant Backend
+    participant XState
+    participant Database
+    participant FB_API as Facebook API
     
-    subgraph "Development Environment"
-        M[Local Development]
-        N[Docker Compose]
-    end
-    
-    A --> C
-    C --> D
-    C --> E
-    C --> F
-    D --> G
-    E --> G
-    F --> G
-    G --> H
-    D --> I
-    E --> I
-    F --> I
-    
-    D --> J
-    E --> J
-    F --> J
-    D --> K
-    E --> K
-    F --> K
+    FB_User->>FB_Messenger: Send message
+    FB_Messenger->>Backend: Webhook: message event
+    Backend->>Database: Find/Create chat session
+    Backend->>XState: Get workflow instance
+    Backend->>XState: Send message to state machine
+    XState->>XState: Process message & find next node
+    XState->>Backend: Return response data
+    Backend->>Database: Save message & update session
+    Backend->>FB_API: Send response to user
+    FB_API->>FB_Messenger: Deliver response
+    FB_Messenger->>FB_User: Show response
 ```
 
-## Module Interaction Diagram
-
+### **3. Facebook OAuth Flow**
 ```mermaid
-graph LR
-    subgraph "Core Modules"
-        A[App Module]
-        B[Auth Module]
-        C[Workflow Module]
-        D[Chat Module]
-    end
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant Backend
+    participant Facebook
+    participant Database
     
-    subgraph "Shared Services"
-        E[Database Service]
-        F[XState Service]
-        G[Validation Service]
-        H[Logger Service]
-    end
-    
-    subgraph "External Integrations"
-        I[Facebook Service]
-        J[N8N Service]
-        K[File Upload Service]
-    end
-    
-    A --> B
-    A --> C
-    A --> D
-    B --> E
-    C --> E
-    D --> E
-    C --> F
-    D --> F
-    B --> G
-    C --> G
-    D --> G
-    A --> H
-    D --> I
-    C --> J
-    C --> K
+    User->>Frontend: Click "Connect Facebook"
+    Frontend->>Facebook: Redirect to OAuth
+    Facebook->>User: Show permission dialog
+    User->>Facebook: Grant permissions
+    Facebook->>Frontend: Redirect with auth code
+    Frontend->>Backend: POST /facebook/oauth/callback
+    Backend->>Facebook: Exchange code for access token
+    Facebook->>Backend: Return token & page data
+    Backend->>Database: Save page information
+    Backend->>Frontend: Return success
+    Frontend->>User: Show connected pages
 ```
 
-## XState Workflow Engine Architecture
+---
 
-```mermaid
-stateDiagram-v2
-    [*] --> WorkflowMachineService
-    
-    state WorkflowMachineService {
-        [*] --> InstanceManager
-        InstanceManager --> CreateInstance
-        InstanceManager --> GetInstance
-        InstanceManager --> RemoveInstance
-        
-        state CreateInstance {
-            [*] --> LoadWorkflowData
-            LoadWorkflowData --> FindStartNode
-            FindStartNode --> InitializeContext
-            InitializeContext --> CreateMachine
-            CreateMachine --> StoreInstance
-            StoreInstance --> [*]
-        }
-        
-        state XStateMachine {
-            [*] --> waiting
-            waiting --> processing : USER_MESSAGE
-            processing --> responding : messageMatch
-            processing --> unmatched : noMatch
-            processing --> ended : workflowComplete
-            responding --> waiting : NEXT_NODE
-            unmatched --> waiting : default
-            ended --> [*]
-        }
-    }
+## 🧩 **Component Architecture**
+
+### **Frontend Components**
+```
+├── src/
+│   ├── components/
+│   │   ├── auth/                    # Authentication components
+│   │   │   ├── AuthContainer.tsx
+│   │   │   ├── FacebookPageConnect.tsx
+│   │   │   └── FacebookOAuthRedirect.tsx
+│   │   ├── nodes/                   # Workflow node components
+│   │   │   └── MessageNode.tsx
+│   │   ├── WorkflowBuilder.tsx      # Main workflow editor
+│   │   ├── WorkflowList.tsx         # Workflow management
+│   │   ├── WorkflowToolbar.tsx      # Action toolbar
+│   │   ├── MessageEditor.tsx        # Node content editor
+│   │   └── ChatPreview.tsx          # Chat testing
+│   ├── store/                       # State management
+│   │   ├── workflowStore.ts
+│   │   └── authStore.ts
+│   ├── services/                    # API services
+│   │   ├── workflowService.ts
+│   │   ├── authService.ts
+│   │   └── chatService.ts
+│   └── App.tsx                      # Main application
 ```
 
-## Data Flow Architecture
-
-```mermaid
-flowchart TD
-    A[User Input] --> B{Message Type}
-    B -->|Text| C[Process Text Message]
-    B -->|Button| D[Process Button Click]
-    B -->|Quick Reply| E[Process Quick Reply]
-    
-    C --> F[Message Matching Algorithm]
-    D --> F
-    E --> F
-    
-    F --> G{Match Found?}
-    G -->|Yes| H[Load Target Node]
-    G -->|No| I[Use Default Response]
-    
-    H --> J[Generate Response]
-    I --> J
-    
-    J --> K{Response Type}
-    K -->|Text| L[Simple Text Response]
-    K -->|Buttons| M[Button Template]
-    K -->|Quick Replies| N[Quick Reply Template]
-    K -->|Cards| O[Generic Template]
-    
-    L --> P[Send to Facebook]
-    M --> P
-    N --> P
-    O --> P
-    
-    P --> Q[Update Session State]
-    Q --> R[Save to Database]
+### **Backend Modules**
+```
+├── src/
+│   ├── auth/                        # Authentication module
+│   │   ├── auth.controller.ts
+│   │   ├── auth.service.ts
+│   │   ├── jwt.strategy.ts
+│   │   └── dto/
+│   ├── workflow/                    # Workflow management
+│   │   ├── workflow.controller.ts
+│   │   ├── workflow.service.ts
+│   │   ├── workflow.machine.ts      # XState implementation
+│   │   └── dto/
+│   ├── chat/                        # Chat processing
+│   │   ├── chat.controller.ts
+│   │   ├── chat.service.ts
+│   │   └── dto/
+│   ├── facebook/                    # Facebook integration
+│   │   ├── facebook.controller.ts
+│   │   ├── facebook.service.ts
+│   │   └── dto/
+│   ├── users/                       # User management
+│   │   ├── users.controller.ts
+│   │   ├── users.service.ts
+│   │   └── dto/
+│   └── entities/                    # Database entities
+│       ├── user.entity.ts
+│       ├── workflow.entity.ts
+│       ├── facebook-page.entity.ts
+│       ├── chat-session.entity.ts
+│       └── chat-message.entity.ts
 ```
 
-## Security Architecture
+---
 
-```mermaid
-graph TB
-    subgraph "Client Security"
-        A[HTTPS/SSL]
-        B[CORS Policy]
-        C[Input Validation]
-    end
-    
-    subgraph "API Security"
-        D[JWT Authentication]
-        E[Rate Limiting]
-        F[Request Validation]
-        G[Sanitization]
-    end
-    
-    subgraph "Data Security"
-        H[Password Hashing]
-        I[Database Encryption]
-        J[Secure Sessions]
-        K[Data Anonymization]
-    end
-    
-    subgraph "Infrastructure Security"
-        L[Network Isolation]
-        M[Firewall Rules]
-        N[VPN Access]
-        O[Audit Logging]
-    end
-    
-    A --> D
-    B --> E
-    C --> F
-    F --> G
-    D --> H
-    E --> I
-    F --> J
-    G --> K
+## ⚙️ **XState Workflow Engine Architecture**
+
+### **State Machine Hierarchy**
+```
+Workflow Machine
+├── waiting                 # Chờ user input
+├── processing             # Xử lý message
+│   ├── matched           # Message matched workflow
+│   └── unmatched         # Message không match
+├── responding            # Gửi response
+├── unmatched            # Xử lý unmatched message
+└── ended                # Workflow kết thúc
 ```
 
-## Scaling Strategy
-
-```mermaid
-graph TB
-    subgraph "Current State"
-        A[Single Instance]
-        B[Shared Database]
-        C[Local Storage]
-    end
-    
-    subgraph "Phase 1: Vertical Scaling"
-        D[Larger Instance]
-        E[Connection Pooling]
-        F[Query Optimization]
-    end
-    
-    subgraph "Phase 2: Horizontal Scaling"
-        G[Load Balancer]
-        H[Multiple App Instances]
-        I[Database Replication]
-        J[Redis Caching]
-    end
-    
-    subgraph "Phase 3: Microservices"
-        K[Auth Service]
-        L[Workflow Service]
-        M[Chat Service]
-        N[Message Queue]
-    end
-    
-    subgraph "Phase 4: Cloud Native"
-        O[Container Orchestration]
-        P[Auto Scaling]
-        Q[Service Mesh]
-        R[Distributed Tracing]
-    end
-    
-    A --> D
-    D --> G
-    G --> K
-    K --> O
+### **Machine Context Structure**
+```typescript
+interface WorkflowContext {
+  currentNodeId: string;              // Node hiện tại
+  userMessage: string;                // Message từ user
+  botResponse: string;                // Response từ bot
+  variables: Record<string, any>;     // Variables lưu trữ
+  facebookUserId: string;             // Facebook user ID
+  conversationHistory: Array<{        // Lịch sử conversation
+    message: string;
+    isFromUser: boolean;
+    timestamp: Date;
+  }>;
+  messageMatchedWorkflow: boolean;    // Flag match status
+}
 ```
 
-## Monitoring Architecture
+### **Enhanced Matching Algorithm**
+```typescript
+function matchesNodeContent(node, userInput) {
+  // 1. Start node keywords
+  if (isStartKeyword(userInput)) return true;
+  
+  // 2. Exact payload matching
+  if (exactPayloadMatch(node, userInput)) return true;
+  
+  // 3. Title-based matching (case-insensitive)
+  if (titleMatch(node, userInput)) return true;
+  
+  // 4. Content-based matching
+  if (contentMatch(node, userInput)) return true;
+  
+  // 5. Special node type handling
+  if (specialNodeMatch(node, userInput)) return true;
+  
+  return false;
+}
+```
 
+---
+
+## 🔐 **Security Architecture**
+
+### **Authentication & Authorization**
+```
+┌─────────────────────────────────────────────┐
+│              Security Layers                │
+├─────────────────────────────────────────────┤
+│  1. JWT Authentication                      │
+│  2. Route Guards (NestJS)                   │
+│  3. Role-based Access Control               │
+│  4. Resource Ownership Validation           │
+│  5. Input Validation & Sanitization         │
+│  6. Rate Limiting                           │
+│  7. CORS Configuration                      │
+└─────────────────────────────────────────────┘
+```
+
+### **Data Protection**
+- **Encryption at Rest**: Database encryption, encrypted backups
+- **Encryption in Transit**: HTTPS/TLS for all communications
+- **Password Security**: bcrypt hashing với salt
+- **Token Security**: JWT với secure secret, expiration
+- **API Security**: Input validation, SQL injection prevention
+
+---
+
+## 📊 **Performance Architecture**
+
+### **Caching Strategy**
+```
+┌─────────────────────────────────────────────┐
+│               Caching Layers                │
+├─────────────────────────────────────────────┤
+│  • Browser Cache (Static assets)           │
+│  • Redis Cache (Session data)              │
+│  • Database Query Cache                    │
+│  • XState Instance Cache                   │
+│  • Facebook API Response Cache             │
+└─────────────────────────────────────────────┘
+```
+
+### **Database Optimization**
+- **Connection Pooling**: TypeORM connection pool
+- **Indexing Strategy**: Optimized indexes cho queries
+- **Query Optimization**: Efficient SQL queries
+- **JSONB Usage**: Fast JSON operations trong PostgreSQL
+
+### **Scalability Considerations**
+- **Horizontal Scaling**: Multiple backend instances
+- **Load Balancing**: Distribute traffic
+- **Database Sharding**: Partition by user/tenant
+- **Microservices**: Service separation capability
+
+---
+
+## 🌐 **Deployment Architecture**
+
+### **Development Environment**
+```
+┌─────────────────────────────────────────────┐
+│            Development Stack                │
+├─────────────────────────────────────────────┤
+│  • Local PostgreSQL                        │
+│  • Local Redis                             │
+│  • Hot Reload (Frontend & Backend)         │
+│  • Debug Logging                           │
+│  • Development Facebook App                │
+└─────────────────────────────────────────────┘
+```
+
+### **Production Environment**
+```
+┌─────────────────────────────────────────────┐
+│             Production Stack                │
+├─────────────────────────────────────────────┤
+│  • Docker Containers                       │
+│  • Kubernetes Orchestration                │
+│  • Load Balancer (Nginx)                   │
+│  • Managed PostgreSQL                      │
+│  • Redis Cluster                           │
+│  • SSL Certificates                        │
+│  • Monitoring & Logging                    │
+│  • Backup & Recovery                       │
+└─────────────────────────────────────────────┘
+```
+
+### **CI/CD Pipeline**
 ```mermaid
 graph LR
-    subgraph "Application Metrics"
-        A[Response Time]
-        B[Error Rate]
-        C[Throughput]
-        D[Active Users]
-    end
-    
-    subgraph "Infrastructure Metrics"
-        E[CPU Usage]
-        F[Memory Usage]
-        G[Disk I/O]
-        H[Network Traffic]
-    end
-    
-    subgraph "Business Metrics"
-        I[Message Volume]
-        J[Workflow Completion]
-        K[User Engagement]
-        L[Conversion Rate]
-    end
-    
-    subgraph "Monitoring Stack"
-        M[Prometheus]
-        N[Grafana]
-        O[AlertManager]
-        P[Log Aggregation]
-    end
-    
-    A --> M
-    B --> M
-    C --> M
-    D --> M
-    E --> M
-    F --> M
-    G --> M
-    H --> M
-    I --> M
-    J --> M
-    K --> M
-    L --> M
-    
-    M --> N
-    M --> O
-    M --> P
+    A[Git Push] --> B[GitHub Actions]
+    B --> C[Run Tests]
+    C --> D[Build Docker Images]
+    D --> E[Push to Registry]
+    E --> F[Deploy to Staging]
+    F --> G[Integration Tests]
+    G --> H[Deploy to Production]
+    H --> I[Health Checks]
 ```
 
-## Error Handling Flow
+---
 
-```mermaid
-flowchart TD
-    A[Request Received] --> B{Validation Pass?}
-    B -->|No| C[400 Bad Request]
-    B -->|Yes| D{Authentication Valid?}
-    D -->|No| E[401 Unauthorized]
-    D -->|Yes| F{Authorization Pass?}
-    F -->|No| G[403 Forbidden]
-    F -->|Yes| H[Process Request]
-    
-    H --> I{Processing Error?}
-    I -->|Database Error| J[500 Internal Server Error]
-    I -->|XState Error| K[Custom Workflow Error]
-    I -->|External API Error| L[502 Bad Gateway]
-    I -->|Success| M[200 Success Response]
-    
-    C --> N[Log Error]
-    E --> N
-    G --> N
-    J --> N
-    K --> N
-    L --> N
-    
-    N --> O[Send Alert]
-    N --> P[Return Error Response]
+## 📈 **Monitoring & Observability**
+
+### **Logging Strategy**
+```
+Application Logs
+├── Error Logs           # Exceptions, failures
+├── Access Logs          # API requests, responses
+├── Performance Logs     # Response times, queries
+├── Security Logs        # Authentication, authorization
+├── Business Logs        # Workflow executions, chat sessions
+└── Debug Logs          # Development debugging
 ```
 
-## API Design Pattern
+### **Metrics Collection**
+- **Application Metrics**: Response times, error rates
+- **System Metrics**: CPU, memory, disk usage
+- **Database Metrics**: Query performance, connections
+- **Business Metrics**: User activity, workflow usage
 
-```mermaid
-graph TB
-    subgraph "RESTful API Design"
-        A[/api/v1/auth/*]
-        B[/api/v1/workflows/*]
-        C[/api/v1/chat/*]
-        D[/api/v1/users/*]
-    end
-    
-    subgraph "Authentication Endpoints"
-        E[POST /auth/login]
-        F[POST /auth/register]
-        G[POST /auth/refresh]
-        H[POST /auth/logout]
-    end
-    
-    subgraph "Workflow Endpoints"
-        I[GET /workflows]
-        J[POST /workflows]
-        K[PUT /workflows/:id]
-        L[DELETE /workflows/:id]
-        M[POST /workflows/:id/activate]
-    end
-    
-    subgraph "Chat Endpoints"
-        N[POST /chat/webhook]
-        O[GET /chat/history/:userId]
-        P[POST /chat/reset/:sessionId]
-        Q[GET /chat/sessions]
-    end
-    
-    A --> E
-    A --> F
-    A --> G
-    A --> H
-    B --> I
-    B --> J
-    B --> K
-    B --> L
-    B --> M
-    C --> N
-    C --> O
-    C --> P
-    C --> Q
-``` 
+### **Health Checks**
+```typescript
+// Health check endpoints
+GET /health              # Basic health status
+GET /health/db          # Database connectivity
+GET /health/redis       # Cache connectivity
+GET /health/facebook    # Facebook API status
+```
+
+---
+
+## 🔄 **Integration Architecture**
+
+### **Facebook Integration**
+```
+┌─────────────────────────────────────────────┐
+│           Facebook Integration              │
+├─────────────────────────────────────────────┤
+│  • OAuth 2.0 Authentication                │
+│  • Graph API Integration                   │
+│  • Webhook Event Processing                │
+│  • Page Access Token Management            │
+│  • Message Sending/Receiving               │
+│  • Error Handling & Retry Logic            │
+└─────────────────────────────────────────────┘
+```
+
+### **API Integration Patterns**
+- **RESTful APIs**: Standard REST endpoints
+- **Webhooks**: Real-time event processing
+- **OAuth 2.0**: Secure third-party authorization
+- **GraphQL**: Efficient data fetching (future)
+
+---
+
+## 🚀 **Future Architecture Considerations**
+
+### **Scalability Enhancements**
+- **Message Queue**: Async processing với Redis/RabbitMQ
+- **Event Sourcing**: Audit trail và replay capability
+- **CQRS**: Command Query Responsibility Segregation
+- **Microservices**: Service decomposition
+
+### **AI/ML Integration**
+- **NLP Processing**: Intent recognition, entity extraction
+- **Machine Learning**: Conversation flow optimization
+- **Analytics**: User behavior analysis
+- **Personalization**: Adaptive workflow responses
+
+### **Multi-channel Support**
+- **WhatsApp Integration**: Extend beyond Facebook
+- **Telegram Bot**: Additional messaging platform
+- **Web Chat Widget**: Embedded chat functionality
+- **Voice Interface**: Voice-based interactions
+
+---
+
+## 📚 **Architecture Decisions**
+
+### **Technology Choices**
+| Component | Technology | Rationale |
+|-----------|------------|-----------|
+| Frontend | React + TypeScript | Modern, type-safe, large ecosystem |
+| Backend | NestJS + TypeScript | Scalable, decorators, dependency injection |
+| Database | PostgreSQL | ACID compliance, JSONB support |
+| State Management | XState | Predictable state transitions |
+| Authentication | JWT | Stateless, scalable |
+| API Design | REST | Simple, widely supported |
+
+### **Design Patterns**
+- **Repository Pattern**: Data access abstraction
+- **Dependency Injection**: Loose coupling
+- **Observer Pattern**: Event-driven architecture
+- **State Machine**: Workflow state management
+- **Factory Pattern**: Service instantiation
+
+### **Best Practices**
+- **Clean Architecture**: Separation of concerns
+- **SOLID Principles**: Object-oriented design
+- **DRY Principle**: Don't repeat yourself
+- **Test-Driven Development**: Quality assurance
+- **Code Documentation**: Maintainability 
