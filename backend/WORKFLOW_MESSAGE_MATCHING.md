@@ -1,105 +1,228 @@
-# Workflow Message Matching Logic
+# Workflow Message Matching Logic - Enhanced Version
 
-## Vấn đề đã được giải quyết
+## Các cải tiến mới
 
-**Vấn đề cũ**: Khi user gửi cùng một tin nhắn nhiều lần, lần đầu match được nhưng các lần sau báo "unmatched".
+**Trước đây**: Chỉ match với `button.payload` và `quickReply.payload`  
+**Bây giờ**: Match với **TẤT CẢ** loại content trong workflow nodes
 
-**Nguyên nhân**: Logic cũ chỉ tìm match trong node hiện tại. Sau khi chuyển node, node mới có thể không có button/quick reply tương ứng.
+## Logic matching mới - Toàn diện
 
-## Logic mới
-
-### 1. **Tìm match trong node hiện tại trước**
+### 1. **Exact Payload Matching** (Ưu tiên cao nhất)
 ```typescript
-// Tìm trong buttons, quick replies, elements của node hiện tại
-if (currentNode?.data.buttons) {
-  const matchedButton = currentNode.data.buttons.find(
-    (button) => button.payload === userInput
-  );
-  // Nếu tìm thấy -> return { nodeId: edge.target, matched: true }
+// So sánh chính xác payload
+button.payload === userInput
+quickReply.payload === userInput  
+element.payload === userInput
+element.quickReplyPayload === userInput
+```
+
+### 2. **Content-based Matching** (Case-insensitive)
+```typescript
+const input = userInput.toLowerCase().trim();
+
+// Buttons & Quick Replies Title
+button.title.toLowerCase().includes(input)
+quickReply.title.toLowerCase().includes(input)
+
+// Elements Content
+switch (element.type) {
+  case 'text':
+    element.content.toLowerCase().includes(input)
+    
+  case 'image':
+    element.title.toLowerCase().includes(input) ||
+    element.imageUrl.toLowerCase().includes(input)
+    
+  case 'video':
+    element.title.toLowerCase().includes(input) ||
+    element.fileUrl.toLowerCase().includes(input)
+    
+  case 'file':
+    element.title.toLowerCase().includes(input) ||
+    element.fileUrl.toLowerCase().includes(input)
+    
+  case 'generic_card':
+    element.title.toLowerCase().includes(input) ||
+    element.subtitle.toLowerCase().includes(input) ||
+    element.buttons[].title.toLowerCase().includes(input)
+    
+  case 'list_item':
+    element.title.toLowerCase().includes(input) ||
+    element.subtitle.toLowerCase().includes(input)
 }
 ```
 
-### 2. **FALLBACK: Tìm match trong tất cả nodes**
+### 3. **Node-level Matching**
 ```typescript
-// Nếu không tìm thấy ở node hiện tại, tìm trong tất cả nodes khác
-for (const node of nodes) {
-  if (node.id === currentNodeId) continue; // Skip node hiện tại
+// Node message content
+node.data.message.toLowerCase().includes(input)
+
+// Node label
+node.data.label.toLowerCase().includes(input)
+```
+
+### 4. **Receipt Node Special Keywords**
+```typescript
+if (node.data.messageType === 'receipt') {
+  const keywords = ['receipt', 'bill', 'order', 'payment', 'invoice', 
+                   'hóa đơn', 'đơn hàng', 'thanh toán'];
   
-  // Check buttons, quick replies, elements của từng node
-  if (node.data.buttons) {
-    const matchedButton = node.data.buttons.find(
-      (button) => button.payload === userInput
-    );
-    if (matchedButton) {
-      return { nodeId: node.id, matched: true }; // Chuyển đến node có match
+  // Keyword matching
+  keywords.some(keyword => input.includes(keyword))
+  
+  // Receipt fields
+  node.data.recipientName.toLowerCase().includes(input)
+  node.data.orderNumber.toLowerCase().includes(input)
+}
+```
+
+## Ví dụ chi tiết
+
+### **Trường hợp 1: Text Element**
+```json
+{
+  "id": "node_greeting",
+  "data": {
+    "message": "Xin chào!",
+    "elements": [
+      {
+        "type": "text",
+        "content": "Chào mừng bạn đến với cửa hàng"
+      }
+    ]
+  }
+}
+
+// User gửi: "chào" hoặc "cửa hàng" hoặc "welcome"
+// ✅ Match: element.content.includes("chào") || element.content.includes("cửa hàng")
+```
+
+### **Trường hợp 2: Image Element**
+```json
+{
+  "id": "node_product",
+  "data": {
+    "elements": [
+      {
+        "type": "image",
+        "title": "iPhone 15 Pro Max",
+        "imageUrl": "https://example.com/iphone15.jpg"
+      }
+    ]
+  }
+}
+
+// User gửi: "iphone" hoặc "15" hoặc "pro"
+// ✅ Match: element.title.includes("iphone") || element.title.includes("15")
+// User gửi: "jpg" hoặc "iphone15"  
+// ✅ Match: element.imageUrl.includes("jpg") || element.imageUrl.includes("iphone15")
+```
+
+### **Trường hợp 3: Receipt Node**
+```json
+{
+  "id": "node_receipt",
+  "data": {
+    "messageType": "receipt",
+    "recipientName": "Nguyễn Văn A",
+    "orderNumber": "ORD-12345"
+  }
+}
+
+// User gửi: "hóa đơn" hoặc "receipt" hoặc "bill"
+// ✅ Match: Special keywords
+// User gửi: "Nguyễn" hoặc "ORD-12345"
+// ✅ Match: recipientName/orderNumber contains input
+```
+
+### **Trường hợp 4: Generic Card**
+```json
+{
+  "id": "node_menu",
+  "data": {
+    "elements": [
+      {
+        "type": "generic_card",
+        "title": "Laptop Gaming",
+        "subtitle": "Máy tính chơi game cao cấp",
+        "buttons": [
+          {"title": "Xem chi tiết", "payload": "view_laptop"},
+          {"title": "Mua ngay", "payload": "buy_laptop"}
+        ]
+      }
+    ]
+  }
+}
+
+// User gửi: "laptop" → Match title
+// User gửi: "gaming" → Match title  
+// User gửi: "máy tính" → Match subtitle
+// User gửi: "chi tiết" → Match button title
+// User gửi: "view_laptop" → Exact payload match
+```
+
+## Thứ tự ưu tiên matching
+
+1. **Current Node - Exact Payload**: `button.payload === userInput`
+2. **Current Node - Content Match**: Title, content, message contains input
+3. **All Nodes - Exact Payload**: Search toàn bộ workflow  
+4. **All Nodes - Content Match**: Search content trong tất cả nodes
+
+## Response với các loại content
+
+### **Text/Image/Video/File Match:**
+```json
+{
+  "messageType": "text", // or "attachment" for media
+  "text": "Nội dung message từ node",
+  "inWorkFlowMsg": true,
+  "originalMessage": "Nội dung từ node",
+  "metadata": {
+    "nodeId": "matched_node_id",
+    "nodeType": "text|image|video|file",
+    "matchedElement": {
+      "type": "text|image|video|file",
+      "content": "Nội dung được match"
     }
   }
 }
 ```
 
-### 3. **Response API với inWorkFlowMsg flag**
-
-#### Khi **match được** (inWorkFlowMsg: true):
+### **Receipt Match:**
 ```json
 {
-  "messageType": "text",
-  "text": "Phản hồi từ workflow node",
-  "sessionId": "session_id",
-  "workflowEnded": false,
+  "messageType": "attachment",
+  "attachment": {
+    "type": "template",
+    "payload": {
+      "template_type": "receipt",
+      "recipient_name": "Nguyễn Văn A",
+      "order_number": "ORD-12345",
+      // ... receipt data
+    }
+  },
   "inWorkFlowMsg": true,
-  "originalMessage": "Nội dung tin nhắn từ node",
   "metadata": {
-    "nodeId": "node_123",
-    "nodeType": "text"
+    "nodeType": "receipt"
   }
 }
 ```
 
-#### Khi **không match** (inWorkFlowMsg: false):
-```json
-{
-  "messageType": "text", 
-  "text": "Tin nhắn gốc từ user",
-  "sessionId": "session_id",
-  "workflowEnded": false,
-  "inWorkFlowMsg": false,
-  "originalMessage": "Tin nhắn gốc từ user",
-  "metadata": {
-    "nodeId": "current_node",
-    "nodeType": "unmatched"
-  }
-}
-```
+## Lợi ích của hệ thống mới
 
-## Ví dụ hoạt động
+✅ **Linh hoạt**: Match với mọi loại content  
+✅ **Thông minh**: Case-insensitive, keyword-based  
+✅ **Toàn diện**: Hỗ trợ text, media, receipt, cards...  
+✅ **Intuitive**: User có thể nhắn keyword tự nhiên  
+✅ **Multilingual**: Hỗ trợ cả tiếng Việt và tiếng Anh  
 
-### Workflow setup:
-- **Node A**: "Chào mừng" với buttons ["Hỗ trợ", "Sản phẩm"]
-- **Node B**: "Menu hỗ trợ" với buttons ["FAQ", "Liên hệ"]  
-- **Node C**: "Menu sản phẩm" với buttons ["Laptop", "Điện thoại"]
+## Ví dụ thực tế
 
-### Trường hợp test:
-
-1. **User gửi: "Hỗ trợ"**
-   - ✅ Match button ở Node A → Chuyển đến Node B
-   - inWorkFlowMsg: true
-
-2. **User gửi lại: "Hỗ trợ"** (từ Node B)
-   - ❌ Node B không có button "Hỗ trợ"
-   - ✅ **FALLBACK**: Tìm thấy ở Node A → Chuyển về Node A
-   - inWorkFlowMsg: true
-
-3. **User gửi: "Xin chào random"**
-   - ❌ Không tìm thấy ở node nào
-   - inWorkFlowMsg: false
-   - text: "Xin chào random" (để gọi hệ thống bên ngoài)
-
-## Lợi ích
-
-✅ **Tương thích ngược**: User có thể gửi lại command từ bất kỳ đâu
-✅ **Flexible navigation**: Không bị "mắc kẹt" ở một node  
-✅ **Clear indication**: Flag `inWorkFlowMsg` cho phép xử lý external AI
-✅ **Better UX**: User không cần nhớ đang ở node nào
+**User gửi "hihi"**:
+- Nếu có button với title "Hi Hi" → ✅ Match
+- Nếu có text element chứa "hihi" → ✅ Match  
+- Nếu có node message chứa "hihi" → ✅ Match
+- Nếu không có gì → ❌ inWorkFlowMsg: false
 
 ## State Machine Flow
 

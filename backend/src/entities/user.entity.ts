@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { Exclude } from 'class-transformer';
 import { Workflow } from './workflow.entity';
+import { FacebookPage } from './facebook-page.entity';
 
 @Entity('users')
 export class User {
@@ -26,6 +27,9 @@ export class User {
 
   @OneToMany(() => Workflow, (workflow) => workflow.user)
   workflows: Workflow[];
+
+  @OneToMany(() => FacebookPage, (facebookPage) => facebookPage.user)
+  facebookPages: FacebookPage[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

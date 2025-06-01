@@ -8,7 +8,9 @@ export const getDatabaseConfig = (configService: ConfigService): TypeOrmModuleOp
   username: configService.get('DATABASE_USERNAME', 'chatbot_user'),
   password: configService.get('DATABASE_PASSWORD', 'chatbot_password'),
   database: configService.get('DATABASE_NAME', 'chatbot_db'),
-  entities: [__dirname + '/../**/*.entity{.ts,.js}'],
+  entities: [__dirname + '/../src/**/*.entity{.ts,.js}'],
+  migrations: [__dirname + '/../src/migrations/*{.ts,.js}'],
   synchronize: configService.get('NODE_ENV') === 'development',
+  migrationsRun: configService.get('NODE_ENV') !== 'development',
   logging: configService.get('NODE_ENV') === 'development',
 }); 
